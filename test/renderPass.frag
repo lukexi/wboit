@@ -25,5 +25,5 @@ void main () {
     accumBuffer = vec4(color.rgb * color.a, color.a) * weight;
      
     // Blend Func: GL_ZERO, GL_ONE_MINUS_SRC_ALPHA
-    revealageBuffer.a = color.a;
+    revealageBuffer = vec4(color.a);
 }

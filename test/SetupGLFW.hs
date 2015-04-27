@@ -13,6 +13,7 @@ setupGLFW windowName desiredW desiredH = do
     GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
     GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor 4
     GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 1
+    GLFW.windowHint $ GLFW.WindowHint'sRGBCapable True
 
     
     Just win <- GLFW.createWindow desiredW desiredH windowName Nothing Nothing

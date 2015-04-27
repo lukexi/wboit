@@ -28,7 +28,7 @@ makeQuad program = do
     -----------------
     
     -- Buffer the quad vertices
-    let quadVertices = 
+    let quadVertices = map (* 10)
             [ -1.0 , -1.0 ,  0.0  
             ,  1.0 , -1.0 ,  0.0  
             ,  1.0 ,  1.0 ,  0.0  

@@ -12,6 +12,7 @@ import Shader
 import Cube
 import Quad
 import Mesh
+import Reshader
 
 ---------------------
 -- Implementing WBOIT
@@ -114,12 +115,12 @@ main = do
     -- Create our window
     win <- setupGLFW "WBOIT" resX resY
 
-
     (framebuffer, accumTexture, revealageTexture) <- createFramebuffer resX resY
 
     -- Load the shaders and geometry for our scene
     cubeProgram   <- createShaderProgram "test/cube.vert"       "test/cube.frag"
-    blendProgram  <- createShaderProgram "test/blendPass.vert"  "test/blendPass.frag"
+    -- blendProgram  <- createShaderProgram "test/blendPass.vert"  "test/blendPass.frag"
+    blendProgramR <- createReshaderProgram "test/blendPass.vert"  "test/blendPass.frag"
     transProgram  <- createShaderProgram "test/renderPass.vert" "test/renderPass.frag"
     
     transMVPUniform   <- getShaderUniform transProgram "uMVP"
@@ -130,7 +131,7 @@ main = do
     transQuad     <- makeQuad transProgram
 
     
-    blendQuad     <- makeQuad blendProgram
+    blendQuad     <- makeQuad =<< blendProgramR
 
     glEnable GL_DEPTH_TEST
     glClearDepth 1
@@ -146,11 +147,12 @@ main = do
         -- Render opaque surfaces
         -------------------------
         glClearColor 0.75 0.75 0.75 1
+
         glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
         glDepthMask GL_TRUE
 
         let model      = mkTransformation 1 (V3 0 0 (-5))
-            view       = lookAt (V3 0 2 5) (V3 0 0 (-5)) (V3 0 1 0)
+            view       = lookAt (V3 0 20 5) (V3 0 0 (-50)) (V3 0 1 0)
             mvp        = projection !*! view !*! model
         renderCube cube mvp
 
@@ -158,39 +160,39 @@ main = do
         -- Begin WBOIT config
         ---------------------
 
-        -- -- Bind the framebuffer
+        -- Bind the framebuffer
         glBindFramebuffer GL_FRAMEBUFFER (unFramebuffer framebuffer)
 
-        -- Clear the accum to vec4(0) and the revealage to float(1)
-        withArray [GL_COLOR_ATTACHMENT0] $ glDrawBuffers 1
-        glClearColor 0 0 0 0
-        glClear GL_COLOR_BUFFER_BIT
-        withArray [GL_COLOR_ATTACHMENT1] $ glDrawBuffers 1
-        glClearColor 1 0 0 0
-        glClear GL_COLOR_BUFFER_BIT
-
         withArray [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] $ glDrawBuffers 2
+        -- Clear the accum to vec4(0) and the revealage to float(1)
+
+        withArray [0,0,0,0] $ glClearBufferfv GL_COLOR 0
+        withArray [1,0,0,0] $ glClearBufferfv GL_COLOR 1
 
         glDepthMask GL_FALSE
         glEnable GL_BLEND
+        glBlendEquation GL_FUNC_ADD
 
         glBlendFunci 0 GL_ONE GL_ONE
         glBlendFunci 1 GL_ZERO GL_ONE_MINUS_SRC_ALPHA
 
-        -- ----------- Draw our transparent surfaces here
+        ----------- Draw our transparent surfaces here
 
         useProgram transProgram
-        drawTransQuad transQuad transColorUniform transMVPUniform view (1,0,0,0.25) (-3)
-        drawTransQuad transQuad transColorUniform transMVPUniform view (1,1,0,0.25) (-2)
-        drawTransQuad transQuad transColorUniform transMVPUniform view (0,0,1,0.25) (-1)
+        drawTransQuad transQuad transColorUniform transMVPUniform view (1,0,0,0.75) (-70)
+        drawTransQuad transQuad transColorUniform transMVPUniform view (1,1,0,0.75) (-60)
+        drawTransQuad transQuad transColorUniform transMVPUniform view (0,0,1,0.75) (-50)
 
-        -- ----------------------------------------------
+        ----------------------------------------------
 
         -- Done drawing transparent surfaces
         glBindFramebuffer GL_FRAMEBUFFER 0
+        glDrawBuffer GL_BACK
 
-        -- -- Blend to screenspace blendQuad
+        -- Blend to screenspace blendQuad
         glBlendFunc GL_ONE_MINUS_SRC_ALPHA GL_SRC_ALPHA
+
+        blendProgram <- blendProgramR
         useProgram blendProgram
 
         glActiveTexture GL_TEXTURE0
@@ -201,7 +203,7 @@ main = do
         revealageTextureU <- getShaderUniform blendProgram "revealageTexture"
         glUniform1i (fromIntegral (unUniformLocation accumTextureU))     0
         glUniform1i (fromIntegral (unUniformLocation revealageTextureU)) 1
-
+        -- glDisable GL_BLEND
         drawMesh blendQuad
 
         GLFW.swapBuffers win
@@ -227,7 +229,7 @@ newtype Framebuffer = Framebuffer { unFramebuffer :: GLuint }
 createFramebuffer :: GLsizei -> GLsizei -> IO (Framebuffer, TextureID, TextureID)
 createFramebuffer sizeX sizeY = do
     accumTexture     <- createFramebufferTexture GL_RGBA16F
-    revealageTexture <- createFramebufferTexture GL_R8
+    revealageTexture <- createFramebufferTexture GL_R16F
 
     frameBuffer <- overPtr (glGenFramebuffers 1)
     glBindFramebuffer GL_FRAMEBUFFER frameBuffer
@@ -239,16 +241,6 @@ createFramebuffer sizeX sizeY = do
 
     -- Enable both color attachments
     withArray [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] $ glDrawBuffers 2
-
-    -- Generate a render buffer for depth
-    -- overPtr (glGenRenderbuffers 1) >>= \renderBuffer -> do
-    --     -- Configure the depth buffer dimensions to match the eye texture
-    --     glBindRenderbuffer GL_RENDERBUFFER renderBuffer
-    --     glRenderbufferStorage GL_RENDERBUFFER GL_DEPTH_COMPONENT16 sizeX sizeY
-    --     glBindRenderbuffer GL_RENDERBUFFER 0
-
-    --     -- Attach the render buffer as the depth target
-    --     glFramebufferRenderbuffer GL_FRAMEBUFFER GL_DEPTH_ATTACHMENT GL_RENDERBUFFER renderBuffer
 
     checkFramebufferStatus
 
