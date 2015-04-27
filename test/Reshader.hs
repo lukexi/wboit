@@ -7,6 +7,7 @@ import Control.Concurrent
 import Control.Monad
 import Filesystem.Path
 import Data.String
+import Graphics.GL
 
 createReshaderProgram :: String -> String -> IO (IO GLProgram)
 createReshaderProgram vertexShaderPath fragmentShaderPath = do
@@ -22,8 +23,10 @@ createReshaderProgram vertexShaderPath fragmentShaderPath = do
             _               -> False
         recompile event = do
             putStrLn $ "Recompiling due to event: " ++ show event
-            newShader <- createShaderProgram vertexShaderPath fragmentShaderPath
-            writeIORef shaderRef newShader
+            newShader@(GLProgram prog) <- createShaderProgram vertexShaderPath fragmentShaderPath
+            linked <- overPtr (glGetProgramiv prog GL_LINK_STATUS)
+            when (linked == GL_TRUE) $ 
+                writeIORef shaderRef newShader
     forkIO $ 
         withManager $ \mgr -> do
             -- start a watching job (in the background)

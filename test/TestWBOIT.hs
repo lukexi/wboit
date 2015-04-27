@@ -118,17 +118,15 @@ main = do
     (framebuffer, accumTexture, revealageTexture) <- createFramebuffer resX resY
 
     -- Load the shaders and geometry for our scene
-    cubeProgram   <- createShaderProgram "test/cube.vert"       "test/cube.frag"
-    -- blendProgram  <- createShaderProgram "test/blendPass.vert"  "test/blendPass.frag"
+    cubeProgramR  <- createReshaderProgram "test/cube.vert"       "test/cube.frag"
     blendProgramR <- createReshaderProgram "test/blendPass.vert"  "test/blendPass.frag"
-    transProgram  <- createShaderProgram "test/renderPass.vert" "test/renderPass.frag"
+    transProgramR <- createReshaderProgram "test/renderPass.vert" "test/renderPass.frag"
     
-    transMVPUniform   <- getShaderUniform transProgram "uMVP"
-    transColorUniform <- getShaderUniform transProgram "uDiffuseColor"
-
+    transMVPUniform   <- transProgramR >>= flip getShaderUniform "uMVP"
+    transColorUniform <- transProgramR >>= flip getShaderUniform "uDiffuseColor"
     
-    cube          <- makeCube cubeProgram
-    transQuad     <- makeQuad transProgram
+    cube          <- makeCube =<< cubeProgramR
+    transQuad     <- makeQuad =<< transProgramR
 
     
     blendQuad     <- makeQuad =<< blendProgramR
@@ -178,7 +176,7 @@ main = do
 
         ----------- Draw our transparent surfaces here
 
-        useProgram transProgram
+        useProgram =<< transProgramR
         drawTransQuad transQuad transColorUniform transMVPUniform view (1,0,0,0.75) (-70)
         drawTransQuad transQuad transColorUniform transMVPUniform view (1,1,0,0.75) (-60)
         drawTransQuad transQuad transColorUniform transMVPUniform view (0,0,1,0.75) (-50)
