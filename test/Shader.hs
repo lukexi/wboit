@@ -12,17 +12,26 @@ import qualified Data.ByteString as BS
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.IO as Text
 
+import Linear
+import Data.Foldable
+
 overPtr :: (MonadIO m, Storable a) => (Ptr a -> IO b) -> m a
 overPtr f = liftIO (alloca (\p -> f p >> peek p))
 
 newtype GLProgram         = GLProgram           { unGLProgram           :: GLuint }
-newtype VertexArrayObject = VertexArrayObject   { unVertexArrayObject   :: GLuint }
+
 newtype AttributeLocation = AttributeLocation   { unAttributeLocation   :: GLint  }
 newtype UniformLocation   = UniformLocation     { unUniformLocation     :: GLint  }
 newtype TextureID         = TextureID           { unTextureID           :: GLuint }
 
 useProgram :: MonadIO m => GLProgram -> m ()
 useProgram (GLProgram program) = glUseProgram (fromIntegral program)
+
+uniformM44 :: UniformLocation -> M44 GLfloat -> IO ()
+uniformM44 uniform matrix = do
+    let mvpUniformLoc = fromIntegral (unUniformLocation uniform)
+    withArray (concatMap toList (transpose matrix)) (\matrixPtr ->
+        glUniformMatrix4fv mvpUniformLoc 1 GL_FALSE matrixPtr)
 
 ---------------
 -- Load shaders

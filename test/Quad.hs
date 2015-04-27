@@ -4,47 +4,18 @@ import Shader
 
 import Graphics.GL
 import Foreign
-import Linear
-import Data.Foldable
-import Control.Monad.Trans
 
-data Quad = Quad
-        { quadVAO        :: VertexArrayObject
-        , quadShader     :: GLProgram
-        , quadIndexCount :: GLsizei
-        , quadUniformMVP :: UniformLocation
-        }
+import Mesh
 
 ----------------------------------------------------------
 -- Make Quad
 ----------------------------------------------------------
 
-renderQuad :: Quad -> M44 GLfloat -> IO ()
-renderQuad quad mvp = do
 
-    useProgram (quadShader quad)
-
-    let mvpUniformLoc = fromIntegral (unUniformLocation (quadUniformMVP quad))
-    
-    withArray (concatMap toList (transpose mvp)) (\mvpPointer ->
-        glUniformMatrix4fv mvpUniformLoc 1 GL_FALSE mvpPointer)
-
-    drawQuad quad
-
-drawQuad :: MonadIO m => Quad -> m ()
-drawQuad quad = do
-    glBindVertexArray (unVertexArrayObject (quadVAO quad))
-
-    glDrawElements GL_TRIANGLES (quadIndexCount quad) GL_UNSIGNED_INT nullPtr
-
-    glBindVertexArray 0
-
-
-makeQuad :: GLProgram -> IO Quad
+makeQuad :: GLProgram -> IO Mesh
 makeQuad program = do
 
     aPosition <- getShaderAttribute program "aPosition"
-    uMVP      <- getShaderUniform   program "uMVP"
 
     -- Setup a VAO
     vaoQuad <- overPtr (glGenVertexArrays 1)
@@ -58,10 +29,10 @@ makeQuad program = do
     
     -- Buffer the quad vertices
     let quadVertices = 
-            [ -1.0 , -1.0 ,  1.0  
-            ,  1.0 , -1.0 ,  1.0  
-            ,  1.0 ,  1.0 ,  1.0  
-            , -1.0 ,  1.0 ,  1.0 ] :: [GLfloat]
+            [ -1.0 , -1.0 ,  0.0  
+            ,  1.0 , -1.0 ,  0.0  
+            ,  1.0 ,  1.0 ,  0.0  
+            , -1.0 ,  1.0 ,  0.0 ] :: [GLfloat]
 
     vaoQuadVertices <- overPtr (glGenBuffers 1)
 
@@ -106,9 +77,7 @@ makeQuad program = do
     
     glBindVertexArray 0
 
-    return $ Quad 
-        { quadVAO        = VertexArrayObject vaoQuad
-        , quadShader     = program
-        , quadIndexCount = fromIntegral (length quadIndices)
-        , quadUniformMVP = uMVP
+    return $ Mesh 
+        { meshVAO        = VertexArrayObject vaoQuad
+        , meshIndexCount = fromIntegral (length quadIndices)
         } 

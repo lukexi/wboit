@@ -7,6 +7,7 @@ import Foreign
 import Linear
 import Data.Foldable
 
+import Mesh
 
 data Cube = Cube
         { cubeVAO        :: VertexArrayObject

@@ -11,6 +11,7 @@ import SetupGLFW
 import Shader
 import Cube
 import Quad
+import Mesh
 
 ---------------------
 -- Implementing WBOIT
@@ -114,106 +115,151 @@ main = do
     win <- setupGLFW "WBOIT" resX resY
 
 
-    (frameBuffer, accumTexture, revealageTexture) <- createFrameBuffer resX resY
+    (framebuffer, accumTexture, revealageTexture) <- createFramebuffer resX resY
 
     -- Load the shaders and geometry for our scene
-    blendProgram  <- createShaderProgram "test/blendPass.vert"  "test/blendPass.frag"
-    renderProgram <- createShaderProgram "test/renderPass.vert" "test/renderPass.frag"
     cubeProgram   <- createShaderProgram "test/cube.vert"       "test/cube.frag"
-    cube          <- makeCube cubeProgram
-    quad          <- makeQuad renderProgram
+    blendProgram  <- createShaderProgram "test/blendPass.vert"  "test/blendPass.frag"
+    transProgram  <- createShaderProgram "test/renderPass.vert" "test/renderPass.frag"
+    
+    transMVPUniform   <- getShaderUniform transProgram "uMVP"
+    transColorUniform <- getShaderUniform transProgram "uDiffuseColor"
 
-    glClearColor 0 0.1 0.1 1
+    
+    cube          <- makeCube cubeProgram
+    transQuad     <- makeQuad transProgram
+
+    
+    blendQuad     <- makeQuad blendProgram
+
     glEnable GL_DEPTH_TEST
+    glClearDepth 1
 
     -- Begin our renderloop
     forever $ do
-        -- glGetErrors
+        glGetErrors
 
         -- Get mouse/keyboard/OS events from GLFW
         GLFW.pollEvents
 
-        -- Bind the eye texture as the frame buffer to render into
-        glBindFramebuffer GL_FRAMEBUFFER (unFramebuffer frameBuffer)
-
-        -- Clear the framebuffer
+        -------------------------
+        -- Render opaque surfaces
+        -------------------------
+        glClearColor 0.75 0.75 0.75 1
         glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
+        glDepthMask GL_TRUE
 
-        ------------------
-        -- Render our cube
-        ------------------
-            
-        -- Render our scene
-        let model      = mkTransformation 1 (V3 0 0 (-4))
-            view       = lookAt (V3 0 2 500) (V3 0 0 (-4)) (V3 0 1 0)
+        let model      = mkTransformation 1 (V3 0 0 (-5))
+            view       = lookAt (V3 0 2 5) (V3 0 0 (-5)) (V3 0 1 0)
             mvp        = projection !*! view !*! model
+        renderCube cube mvp
+
+        ---------------------
+        -- Begin WBOIT config
+        ---------------------
+
+        -- -- Bind the framebuffer
+        glBindFramebuffer GL_FRAMEBUFFER (unFramebuffer framebuffer)
+
+        -- Clear the accum to vec4(0) and the revealage to float(1)
+        withArray [GL_COLOR_ATTACHMENT0] $ glDrawBuffers 1
+        glClearColor 0 0 0 0
+        glClear GL_COLOR_BUFFER_BIT
+        withArray [GL_COLOR_ATTACHMENT1] $ glDrawBuffers 1
+        glClearColor 1 0 0 0
+        glClear GL_COLOR_BUFFER_BIT
+
+        withArray [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] $ glDrawBuffers 2
 
         glDepthMask GL_FALSE
         glEnable GL_BLEND
-        
-        withArray [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] $ glDrawBuffers 2
 
         glBlendFunci 0 GL_ONE GL_ONE
         glBlendFunci 1 GL_ZERO GL_ONE_MINUS_SRC_ALPHA
+
+        -- ----------- Draw our transparent surfaces here
+
+        useProgram transProgram
+        drawTransQuad transQuad transColorUniform transMVPUniform view (1,0,0,0.25) (-3)
+        drawTransQuad transQuad transColorUniform transMVPUniform view (1,1,0,0.25) (-2)
+        drawTransQuad transQuad transColorUniform transMVPUniform view (0,0,1,0.25) (-1)
+
+        -- ----------------------------------------------
+
+        -- Done drawing transparent surfaces
+        glBindFramebuffer GL_FRAMEBUFFER 0
+
+        -- -- Blend to screenspace blendQuad
+        glBlendFunc GL_ONE_MINUS_SRC_ALPHA GL_SRC_ALPHA
+        useProgram blendProgram
 
         glActiveTexture GL_TEXTURE0
         glBindTexture GL_TEXTURE_2D (unTextureID accumTexture)
         glActiveTexture GL_TEXTURE1
         glBindTexture GL_TEXTURE_2D (unTextureID revealageTexture)
-
-        renderCube cube mvp
-
-        glBindFramebuffer GL_FRAMEBUFFER 0
-
-        -- Blend to screenspace quad
-        glBlendFunc GL_ONE_MINUS_SRC_ALPHA GL_SRC_ALPHA
-        useProgram blendProgram
-
         accumTextureU     <- getShaderUniform blendProgram "accumTexture"
         revealageTextureU <- getShaderUniform blendProgram "revealageTexture"
         glUniform1i (fromIntegral (unUniformLocation accumTextureU))     0
         glUniform1i (fromIntegral (unUniformLocation revealageTextureU)) 1
 
-        drawQuad quad
+        drawMesh blendQuad
 
         GLFW.swapBuffers win
+
+drawTransQuad :: Mesh
+              -> UniformLocation
+              -> UniformLocation
+              -> V4 (V4 GLfloat)
+              -> (GLfloat, GLfloat, GLfloat, GLfloat)
+              -> GLfloat
+              -> IO ()
+drawTransQuad transQuad transColorUniform transMVPUniform view (r,g,b,a) z = do
+    let transModel = mkTransformation 1 (V3 0 0 z)
+        transMVP   = projection !*! view !*! transModel
+    glUniform4f (unUniformLocation transColorUniform) r g b a
+    uniformM44 transMVPUniform transMVP
+    drawMesh transQuad
 
 
 newtype Framebuffer = Framebuffer { unFramebuffer :: GLuint }
 
 -- | Create the framebuffer we'll render into and pass to the Oculus SDK
-createFrameBuffer :: GLsizei -> GLsizei -> IO (Framebuffer, TextureID, TextureID)
-createFrameBuffer sizeX sizeY = do
-    frameBufferTexture0 <- createFrameBufferTexture
-    frameBufferTexture1 <- createFrameBufferTexture
+createFramebuffer :: GLsizei -> GLsizei -> IO (Framebuffer, TextureID, TextureID)
+createFramebuffer sizeX sizeY = do
+    accumTexture     <- createFramebufferTexture GL_RGBA16F
+    revealageTexture <- createFramebufferTexture GL_R8
 
     frameBuffer <- overPtr (glGenFramebuffers 1)
-
-    -- Attach the eye texture as the color buffer
     glBindFramebuffer GL_FRAMEBUFFER frameBuffer
-    glFramebufferTexture2D GL_FRAMEBUFFER GL_COLOR_ATTACHMENT0 GL_TEXTURE_2D (unTextureID frameBufferTexture0) 0
-    -- (this apparently won't work on GLES)
-    glFramebufferTexture2D GL_FRAMEBUFFER GL_COLOR_ATTACHMENT1 GL_TEXTURE_2D (unTextureID frameBufferTexture1) 0
 
+    -- Attach the accumTexture and revealageTexture as color attachments 0 and 1, resp.
+    glFramebufferTexture2D GL_FRAMEBUFFER GL_COLOR_ATTACHMENT0 GL_TEXTURE_2D (unTextureID accumTexture) 0
+    -- (this apparently won't work on GLES)
+    glFramebufferTexture2D GL_FRAMEBUFFER GL_COLOR_ATTACHMENT1 GL_TEXTURE_2D (unTextureID revealageTexture) 0
+
+    -- Enable both color attachments
+    withArray [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] $ glDrawBuffers 2
 
     -- Generate a render buffer for depth
-    overPtr (glGenRenderbuffers 1) >>= \renderBuffer -> do
-        -- Configure the depth buffer dimensions to match the eye texture
-        glBindRenderbuffer GL_RENDERBUFFER renderBuffer
-        glRenderbufferStorage GL_RENDERBUFFER GL_DEPTH_COMPONENT16 sizeX sizeY
-        glBindRenderbuffer GL_RENDERBUFFER 0
+    -- overPtr (glGenRenderbuffers 1) >>= \renderBuffer -> do
+    --     -- Configure the depth buffer dimensions to match the eye texture
+    --     glBindRenderbuffer GL_RENDERBUFFER renderBuffer
+    --     glRenderbufferStorage GL_RENDERBUFFER GL_DEPTH_COMPONENT16 sizeX sizeY
+    --     glBindRenderbuffer GL_RENDERBUFFER 0
 
-        -- Attach the render buffer as the depth target
-        glFramebufferRenderbuffer GL_FRAMEBUFFER GL_DEPTH_ATTACHMENT GL_RENDERBUFFER renderBuffer
+    --     -- Attach the render buffer as the depth target
+    --     glFramebufferRenderbuffer GL_FRAMEBUFFER GL_DEPTH_ATTACHMENT GL_RENDERBUFFER renderBuffer
+
+    checkFramebufferStatus
 
     -- Unbind the framebuffer
     glBindFramebuffer GL_FRAMEBUFFER 0
 
-    return (Framebuffer frameBuffer, frameBufferTexture0, frameBufferTexture1)
+    return (Framebuffer frameBuffer, accumTexture, revealageTexture)
     where 
         -- | Create and configure the texture to use for our framebuffer
-        createFrameBufferTexture :: IO TextureID
-        createFrameBufferTexture = do
+        createFramebufferTexture :: GLenum -> IO TextureID
+        createFramebufferTexture storage = do
             texID <- overPtr (glGenTextures 1)
             
             glBindTexture   GL_TEXTURE_2D texID
@@ -221,9 +267,18 @@ createFrameBuffer sizeX sizeY = do
             glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_LINEAR
             glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_CLAMP_TO_BORDER
             glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_CLAMP_TO_BORDER
-            glTexStorage2D  GL_TEXTURE_2D 1 GL_RGBA8 sizeX sizeY
+            glTexStorage2D  GL_TEXTURE_2D 1 storage sizeX sizeY
             glBindTexture   GL_TEXTURE_2D 0
             
             return (TextureID texID)
+
+        checkFramebufferStatus = do
+            status <- glCheckFramebufferStatus GL_FRAMEBUFFER
+            case status of
+                GL_FRAMEBUFFER_COMPLETE                      -> return ()
+                GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT         -> error "Incomplete framebuffer attachment"
+                GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS         -> error "Framebuffer images have differing dimensions"
+                GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT -> error "No images attached to framebuffer"
+                GL_FRAMEBUFFER_UNSUPPORTED                   -> error "Unsupported framebuffer configuration"
 
 

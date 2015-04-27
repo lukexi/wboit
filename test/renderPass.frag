@@ -1,6 +1,6 @@
 #version 330 core
 
-uniform vec4 diffuseColor;
+uniform vec4 uDiffuseColor;
 
 in vec3 vPosition;
 
@@ -9,7 +9,7 @@ layout (location = 1) out vec4 revealageBuffer;
 
 void main () {
 
-    vec4 color = diffuseColor; // regular shading code
+    vec4 color = uDiffuseColor; // regular shading code
 
     // NOTE: Output linear (not gamma encoded!), unmultiplied color from
     // the rest of the shader.  
@@ -17,11 +17,10 @@ void main () {
     // Insert your favorite weighting function here. The color-based factor
     // avoids color pollution from the edges of wispy clouds. The z-based
     // factor gives precedence to nearer surfaces.
-    float term1 = max(min(1.0, max(max(color.r, color.g), color.b) * color.a), color.a);
-    float term2 = clamp(0.03 / (1e-5 + pow(vPosition.z / 200, 4.0)), 1e-2, 3e3);
-    float weight = term1 * term2;
+    float weight = max(min(1.0, max(max(color.r, color.g), color.b) * color.a), color.a) 
+                 * clamp(0.03 / (1e-5 + pow(vPosition.z / 200, 4.0)), 1e-2, 3e3);
     
-    // Blend Func: GL_ONE, GL_ONE -- Luke sez: he means "specify these outside" (see topmost snippet above^^^)
+    // Blend Func: GL_ONE, GL_ONE
     // Switch to premultiplied alpha and weight
     accumBuffer = vec4(color.rgb * color.a, color.a) * weight;
      
