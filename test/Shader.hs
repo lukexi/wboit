@@ -38,7 +38,6 @@ uniformM44 uniform matrix = do
 ---------------
 
 createShaderProgram :: FilePath -> FilePath -> IO GLProgram
-
 createShaderProgram vertexShaderPath fragmentShaderPath =
    
     do vertexShader <- glCreateShader GL_VERTEX_SHADER

@@ -10,6 +10,7 @@ layout (location = 1) out vec4 revealageBuffer;
 void main () {
 
     vec4 color = uDiffuseColor; // regular shading code
+    // color = vec4(0,0,1,1);
 
     // NOTE: Output linear (not gamma encoded!), unmultiplied color from
     // the rest of the shader.  

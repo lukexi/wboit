@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.GL
@@ -13,6 +14,7 @@ import Cube
 import Quad
 import Mesh
 import Reshader
+import Halive.Utils
 
 ---------------------
 -- Implementing WBOIT
@@ -110,10 +112,18 @@ resY = 1080
 projection :: M44 GLfloat
 projection = perspective 45 (resX/resY) 0.01 1000
 
+data WBOIT = WBOIT 
+    { wboitBlendProgramR :: IO GLProgram
+    , wboitAccumTexture :: TextureID
+    , wboitRevealageTexture :: TextureID
+    , wboitBlendQuad    :: Mesh
+    , wboitFramebuffer  :: Framebuffer
+    }
+
 main :: IO a
-main = do    
+main = do
     -- Create our window
-    win <- setupGLFW "WBOIT" resX resY
+    win <- reacquire 0 (setupGLFW "WBOIT" resX resY)
 
     (framebuffer, accumTexture, revealageTexture) <- createFramebuffer resX resY
 
@@ -130,6 +140,14 @@ main = do
 
     
     blendQuad     <- makeQuad =<< blendProgramR
+
+    let wboit = WBOIT
+            { wboitBlendProgramR     = blendProgramR
+            , wboitAccumTexture      = accumTexture
+            , wboitRevealageTexture  = revealageTexture
+            , wboitBlendQuad         = blendQuad
+            , wboitFramebuffer       = framebuffer
+            }
 
     glEnable GL_DEPTH_TEST
     glClearDepth 1
@@ -154,57 +172,62 @@ main = do
             mvp        = projection !*! view !*! model
         renderCube cube mvp
 
-        ---------------------
-        -- Begin WBOIT config
-        ---------------------
-
-        -- Bind the framebuffer
-        glBindFramebuffer GL_FRAMEBUFFER (unFramebuffer framebuffer)
-
-        withArray [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] $ glDrawBuffers 2
-        -- Clear the accum to vec4(0) and the revealage to float(1)
-
-        withArray [0,0,0,0] $ glClearBufferfv GL_COLOR 0
-        withArray [1,0,0,0] $ glClearBufferfv GL_COLOR 1
-
-        glDepthMask GL_FALSE
-        glEnable GL_BLEND
-        glBlendEquation GL_FUNC_ADD
-
-        glBlendFunci 0 GL_ONE GL_ONE
-        glBlendFunci 1 GL_ZERO GL_ONE_MINUS_SRC_ALPHA
-
-        ----------- Draw our transparent surfaces here
-
-        useProgram =<< transProgramR
-        drawTransQuad transQuad transColorUniform transMVPUniform view (1,0,0,0.75) (-70)
-        drawTransQuad transQuad transColorUniform transMVPUniform view (1,1,0,0.75) (-60)
-        drawTransQuad transQuad transColorUniform transMVPUniform view (0,0,1,0.75) (-50)
-
-        ----------------------------------------------
-
-        -- Done drawing transparent surfaces
-        glBindFramebuffer GL_FRAMEBUFFER 0
-        glDrawBuffer GL_BACK
-
-        -- Blend to screenspace blendQuad
-        glBlendFunc GL_ONE_MINUS_SRC_ALPHA GL_SRC_ALPHA
-
-        blendProgram <- blendProgramR
-        useProgram blendProgram
-
-        glActiveTexture GL_TEXTURE0
-        glBindTexture GL_TEXTURE_2D (unTextureID accumTexture)
-        glActiveTexture GL_TEXTURE1
-        glBindTexture GL_TEXTURE_2D (unTextureID revealageTexture)
-        accumTextureU     <- getShaderUniform blendProgram "accumTexture"
-        revealageTextureU <- getShaderUniform blendProgram "revealageTexture"
-        glUniform1i (fromIntegral (unUniformLocation accumTextureU))     0
-        glUniform1i (fromIntegral (unUniformLocation revealageTextureU)) 1
-        -- glDisable GL_BLEND
-        drawMesh blendQuad
+        withWBOIT wboit $ do
+            useProgram =<< transProgramR
+            drawTransQuad transQuad transColorUniform transMVPUniform view (1,0,0,0.75) (-70)
+            drawTransQuad transQuad transColorUniform transMVPUniform view (1,1,0,0.75) (-60)
+            drawTransQuad transQuad transColorUniform transMVPUniform view (0,0,1,0.75) (-50)
 
         GLFW.swapBuffers win
+
+withWBOIT WBOIT{..} drawTransparentSurfaces = do
+    ---------------------
+    -- Begin WBOIT config
+    ---------------------
+
+    -- Bind the framebuffer
+    glBindFramebuffer GL_FRAMEBUFFER (unFramebuffer wboitFramebuffer)
+
+    withArray [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] $ glDrawBuffers 2
+    -- Clear the accum to vec4(0) and the revealage to float(1)
+
+    withArray [0,0,0,0] $ glClearBufferfv GL_COLOR 0
+    withArray [1,0,0,0] $ glClearBufferfv GL_COLOR 1
+
+    glDepthMask GL_FALSE
+    glEnable GL_BLEND
+    glBlendEquation GL_FUNC_ADD
+
+    glBlendFunci 0 GL_ONE GL_ONE
+    glBlendFunci 1 GL_ZERO GL_ONE_MINUS_SRC_ALPHA
+
+    ----------- Draw our transparent surfaces here
+
+    drawTransparentSurfaces
+
+    ----------------------------------------------
+
+    -- Done drawing transparent surfaces
+    glBindFramebuffer GL_FRAMEBUFFER 0
+    glDrawBuffer GL_BACK
+
+    -- Blend to screenspace blendQuad
+    glBlendFunc GL_ONE_MINUS_SRC_ALPHA GL_SRC_ALPHA
+
+    blendProgram <- wboitBlendProgramR
+    useProgram blendProgram
+
+    glActiveTexture GL_TEXTURE0
+    glBindTexture GL_TEXTURE_2D (unTextureID wboitAccumTexture)
+    glActiveTexture GL_TEXTURE1
+    glBindTexture GL_TEXTURE_2D (unTextureID wboitRevealageTexture)
+    accumTextureU     <- getShaderUniform blendProgram "accumTexture"
+    revealageTextureU <- getShaderUniform blendProgram "revealageTexture"
+    glUniform1i (fromIntegral (unUniformLocation accumTextureU))     0
+    glUniform1i (fromIntegral (unUniformLocation revealageTextureU)) 1
+    -- glDisable GL_BLEND
+    drawMesh wboitBlendQuad
+
 
 drawTransQuad :: Mesh
               -> UniformLocation
