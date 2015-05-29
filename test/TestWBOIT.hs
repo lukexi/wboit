@@ -12,7 +12,6 @@ import           Cube
 import           Halive.Utils
 import           Mesh
 import           Quad
-import           Reshader
 import           SetupGLFW
 import           Shader
 
@@ -20,9 +19,14 @@ import           Shader
 -- Implementing WBOIT
 ---------------------
 
-----
--- NOTE: we need to preserve the depth buffer for time-warp... is that possible?
-----
+{-
+NOTE: we need to preserve the depth buffer for
+    positional time-warp... is that possible?
+
+Update: we are now blitting the opaque depth buffer into the wboit buffer,
+and we could write to it (but not use depth testing) during wboit
+and then blit it back again.
+-}
 
 
 resX, resY :: Num a => a
@@ -110,6 +114,7 @@ main = do
 
         GLFW.swapBuffers win
 
+withWBOIT :: WBOIT -> IO a -> IO ()
 withWBOIT WBOIT{..} drawTransparentSurfaces = do
     ---------------------------
     -- Draw into WBOIT textures

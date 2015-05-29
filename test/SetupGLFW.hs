@@ -2,8 +2,6 @@ module SetupGLFW where
 
 import qualified Graphics.UI.GLFW as GLFW
 
-import Control.Monad
-
 setupGLFW :: String -> Int -> Int -> IO GLFW.Window
 setupGLFW windowName desiredW desiredH = do
     _ <- GLFW.init
@@ -15,15 +13,15 @@ setupGLFW windowName desiredW desiredH = do
     GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor 1
     GLFW.windowHint $ GLFW.WindowHint'sRGBCapable True
 
-    
+
     Just win <- GLFW.createWindow desiredW desiredH windowName Nothing Nothing
-    
+
 
     -- Compensate for retina framebuffers on Mac
     -- (frameW, frameH) <- GLFW.getFramebufferSize win
     -- when (frameW > desiredW && frameH > desiredH) $
     --     GLFW.setWindowSize win (desiredW `div` 2) (desiredH `div` 2)
-    
+
     GLFW.makeContextCurrent (Just win)
 
     GLFW.swapInterval 1
