@@ -1,4 +1,4 @@
-module Cube where
+module TransCube where
 
 import           Shader
 
@@ -8,7 +8,6 @@ import           Graphics.GL
 import           Linear
 
 import           Mesh
-import           Shader
 
 data Cube = Cube
         { cubeVAO        :: VertexArrayObject
@@ -21,8 +20,8 @@ data Cube = Cube
 -- Make Cube
 ----------------------------------------------------------
 
-renderCube :: Cube -> M44 GLfloat -> IO ()
-renderCube cube mvp = do
+renderTransCube :: Cube -> M44 GLfloat -> IO ()
+renderTransCube cube mvp = do
 
     useProgram (cubeShader cube)
 
@@ -35,12 +34,10 @@ renderCube cube mvp = do
     glBindVertexArray 0
 
 
-makeCube :: GLProgram -> IO Cube
-makeCube program = do
+makeTransCube :: GLProgram -> IO Cube
+makeTransCube program = do
 
     aPosition <- getShaderAttribute program "aPosition"
-    aColor    <- getShaderAttribute program "aColor"
-    aID       <- getShaderAttribute program "aID"
     uMVP      <- getShaderUniform   program "uMVP"
 
     -- Setup a VAO
@@ -91,80 +88,6 @@ makeCube program = do
         GL_FALSE          -- don't normalize
         0                 -- no extra data between each position
         nullPtr           -- offset of first element
-
-    --------------
-    -- Cube Colors
-    --------------
-
-    -- Buffer the cube colors
-    let cubeColors =
-            -- front colors
-            [ 1.0, 0.0, 0.0
-            , 0.0, 1.0, 0.0
-            , 0.0, 0.0, 1.0
-            , 1.0, 1.0, 1.0
-              -- back colors
-            , 1.0, 0.0, 0.0
-            , 0.0, 1.0, 0.0
-            , 0.0, 0.0, 1.0
-            , 1.0, 1.0, 1.0 ] :: [GLfloat]
-
-    vboCubeColors <- overPtr (glGenBuffers 1)
-
-    glBindBuffer GL_ARRAY_BUFFER vboCubeColors
-
-
-    let cubeColorsSize = fromIntegral (sizeOf (undefined :: GLfloat) * length cubeColors)
-    withArray cubeColors $
-        \cubeColorsPtr ->
-            glBufferData GL_ARRAY_BUFFER cubeColorsSize (castPtr cubeColorsPtr) GL_STATIC_DRAW
-
-
-    glEnableVertexAttribArray (fromIntegral (unAttributeLocation aColor))
-
-    glVertexAttribPointer
-        (fromIntegral (unAttributeLocation aColor)) -- attribute
-        3                 -- number of elements per vertex, here (R,G,B)
-        GL_FLOAT          -- the type of each element
-        GL_FALSE          -- don't normalize
-        0                 -- no extra data between each position
-        nullPtr           -- offset of first element
-
-    -----------
-    -- Cube IDs
-    -----------
-
-    -- Buffer the cube ids
-    let cubeIDs =
-            [ 0
-            , 1
-            , 2
-            , 3
-            , 4
-            , 5 ] :: [GLfloat]
-
-    vboCubeIDs <- overPtr (glGenBuffers 1)
-
-    glBindBuffer GL_ARRAY_BUFFER vboCubeIDs
-
-    let cubeIDsSize = fromIntegral (sizeOf (undefined :: GLfloat) * length cubeIDs)
-
-    withArray cubeIDs $
-        \cubeIDsPtr ->
-            glBufferData GL_ARRAY_BUFFER cubeIDsSize (castPtr cubeIDsPtr) GL_STATIC_DRAW
-
-
-    glEnableVertexAttribArray (fromIntegral (unAttributeLocation aID))
-
-    glVertexAttribPointer
-        (fromIntegral (unAttributeLocation aID)) -- attribute
-        1                 -- number of elements per vertex, here (R,G,B)
-        GL_FLOAT          -- the type of each element
-        GL_FALSE          -- don't normalize
-        0                 -- no extra data between each position
-        nullPtr           -- offset of first element
-
-
 
     ----------------
     -- Cube Indicies
